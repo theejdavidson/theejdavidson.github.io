@@ -1,0 +1,139 @@
+I"4<p>Three weeks into <a href="https://flatironschool.com/">Flatiron School</a> and we’ve hit the ground running with our first project. Using <a href="https://www.ruby-lang.org/en/">Ruby’s</a> ActiveRecord to send GET requests to <a href="https://pokeapi.co/">PokéAPI</a>, an API containing extensive pokémon-related data, we were able to seed our database for tests.</p>
+
+<p>For a little more info on how all these tools work together, I’ll explain them piece by piece. To set up a database that we can interract with manually (sans ActiveRecord), the following can be placed in the ‘../config/environment.rb’ ruby file:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="no">DB</span> <span class="o">=</span> <span class="p">{</span><span class="ss">:conn</span> <span class="o">=&gt;</span> <span class="no">SQLite3</span><span class="o">::</span><span class="no">Database</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="s2">"db/students.db"</span><span class="p">)}</span>
+</code></pre></div></div>
+
+<p>This bit of code allows us to call DB[:conn] to set up a database connection elsewhere in our application.</p>
+
+<p>Since the standard way to perform these maps is with a CRUD (Create, Read, Update, Delete) pattern, I’ll go through what each step might have looked like in our project if we didn’t get to use ActiveRecord to map our Objects to the Relational Database in the case of our Pokemon Class.</p>
+
+<p><img src="/assets/images/grimer.png" alt="image" /></p>
+
+<p>Inside of our Pokemon Class we need to consider the data that would apply to all wild Pokémon. They each have a name corresponding to their species, a primary ID key to preserve data integrity, and a type_id foreign key to access the type of pokémon that they are (fire type, water type, ghost type, ect.). To create this table we would insert the following method:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code>  <span class="k">def</span> <span class="nc">self</span><span class="o">.</span><span class="nf">create_table</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="o">&lt;&lt;-</span><span class="no">SQL</span><span class="sh">
+    CREATE TABLE IF NOT EXISTS pokemons(
+      id INTEGER PRIMARY KEY,
+      name TEXT,
+      type_id INTEGER
+    );
+</span><span class="no">    SQL</span>
+    <span class="c1"># this lets us talk to our SQL database</span>
+    <span class="no">DB</span><span class="p">[</span><span class="ss">:conn</span><span class="p">].</span><span class="nf">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">)</span> 
+  <span class="k">end</span>
+</code></pre></div></div>
+<p>With Pokemon.create_table, we can now create the table in our database (we pluralize tables with an s and pokémon are no exception). However, this method simply creates columns for the table itself and leaves us with no way to make an entry with a name. Fear not, Ruby has an answer to this! Since we are defining a class, we can write an initialize function and a special helper macro called :attr_reader. Within our Pokemon class we can define the following:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># this allows us to access a name that has been set</span>
+<span class="c1"># on an instance of pokemon as well as the primary key id and type foreign key</span>
+<span class="nb">attr_reader</span> <span class="ss">:name</span><span class="p">,</span> <span class="ss">:id</span><span class="p">,</span> <span class="ss">:type_id</span>
+<span class="c1"># we set the default value of id to nil and let SQL fill it in</span>
+<span class="k">def</span> <span class="nf">initialize</span><span class="p">(</span><span class="nb">name</span><span class="p">,</span> <span class="n">type_id</span><span class="p">,</span> <span class="nb">id</span> <span class="o">=</span> <span class="kp">nil</span><span class="p">)</span>
+  <span class="vi">@id</span> <span class="o">=</span> <span class="nb">id</span>
+  <span class="vi">@name</span> <span class="o">=</span> <span class="nb">name</span>
+  <span class="vi">@type_id</span> <span class="o">=</span> <span class="n">type_id</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Now when we create an instance of Pokemon it will have a name and a space for a primary key id. Our creation process isn’t done yet though, we still need to take the instance of our Ruby object and save it as a database record. We can write a Save method like this:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">save</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="o">&lt;&lt;-</span><span class="no">SQL</span><span class="sh">
+    INSERT INTO pokemons (name, type_id) VALUES (?, ?);
+</span><span class="no">    SQL</span>
+
+    <span class="no">DB</span><span class="p">[</span><span class="ss">:conn</span><span class="p">].</span><span class="nf">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="nb">self</span><span class="p">.</span><span class="nf">name</span><span class="p">,</span> <span class="nb">self</span><span class="p">.</span><span class="nf">type_id</span><span class="p">)</span>
+
+    <span class="vi">@id</span> <span class="o">=</span> <span class="no">DB</span><span class="p">[</span><span class="ss">:conn</span><span class="p">].</span><span class="nf">execute</span><span class="p">(</span><span class="s2">"SELECT last_insert_rowid() FROM pokemons;"</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+  <span class="k">end</span>
+</code></pre></div></div>
+
+<p>Now, our Pokémon instances can be saved to the database! Our C in crud is complete!</p>
+
+<p><img src="/assets/images/party.gif" alt="image" /></p>
+
+<p>Don’t celebrate just yet, we’ve got plenty more to write.</p>
+
+<p>The next step is reading them, so let’s write a simple query function that accepts the pokémon name as a string and returns the matching row from the database:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="k">def</span> <span class="nc">self</span><span class="o">.</span><span class="nf">find_by_name</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span>
+    <span class="n">sql</span> <span class="o">=</span> <span class="o">&lt;&lt;-</span><span class="no">SQL</span><span class="sh">
+    SELECT *
+    FROM pokemons
+    WHERE name = ?
+    LIMIT 1;
+</span><span class="no">    SQL</span>
+
+    <span class="no">DB</span><span class="p">[</span><span class="ss">:conn</span><span class="p">].</span><span class="nf">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="nb">name</span><span class="p">).</span><span class="nf">map</span> <span class="k">do</span> <span class="o">|</span><span class="n">row</span><span class="o">|</span>
+      <span class="nb">self</span><span class="p">.</span><span class="nf">new_from_db</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+    <span class="k">end</span><span class="p">.</span><span class="nf">first</span> 
+    <span class="c1"># by chaining .first we return the single row instance from an array</span>
+  <span class="k">end</span>
+</code></pre></div></div>
+
+<p>Next up is Update. For our use case, let’s say we accidentally entered a Bikachu instead of Pikachu into our database. With an ‘attr_writer :name’ macro we could change the name of our ruby object instance, but we would prefer to update the database to correct it first.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">update_name</span><span class="p">(</span><span class="n">new_name</span><span class="p">)</span>
+  <span class="n">sql</span> <span class="o">=</span> <span class="o">&lt;&lt;-</span><span class="no">SQL</span><span class="sh">
+  UPDATE pokemons
+  SET name = ?
+  WHERE name = ?
+</span><span class="no">  SQL</span>
+
+  <span class="no">DB</span><span class="p">[</span><span class="ss">:conn</span><span class="p">].</span><span class="nf">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="n">new_name</span><span class="p">,</span> <span class="nb">self</span><span class="p">.</span><span class="nf">name</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+<p>Finally, we need a method to Delete a row from our database altogether. We can call this on an instance of pokémon to delete it from the database and let the garbage collector handle it’s existence as a Ruby Object. The delete method would simply look like this:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">delete</span>
+  <span class="n">sql</span> <span class="o">=</span> <span class="o">&lt;&lt;-</span><span class="no">SQL</span><span class="sh">
+  DELETE FROM pokemons
+  WHERE name = ?
+</span><span class="no">  SQL</span>
+
+  <span class="no">DB</span><span class="p">[</span><span class="ss">:conn</span><span class="p">].</span><span class="nf">execute</span><span class="p">(</span><span class="n">sql</span><span class="p">,</span> <span class="nb">self</span><span class="p">.</span><span class="nf">name</span><span class="p">)</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>With these methods, we have a simple database CRUD functionality in place. However, this work needs to be done for every object/table relationship within our app and more specific queries and updates all need their own methods as well. All that typing can get tiring pretty quickly!</p>
+
+<p><img src="/assets/images/tired_pika.gif" alt="image" /></p>
+
+<p>Lucky for us, Ruby has a tool called ActiveRecord that can save us all this work and a lot more.</p>
+
+<p>ActiveRecord is a framework that abstracts away a large amount of code that comes from Object Relational Mapping by giving us inherited methods. With</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">gem</span> <span class="s2">"activerecord"</span>
+</code></pre></div></div>
+<p>in our Gemfile and</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">require</span> <span class="s1">'sinatra/activerecord/rake'</span>
+</code></pre></div></div>
+<p>in our Rakefile, we can allow our Pokémon class to inherit the ActiveRecord base object:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">class</span> <span class="nc">Pokemon</span> <span class="o">&lt;</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Out of the box, this gives us the ability to call the following methods:</p>
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># both creates the object and saves the relational mapping to the database</span>
+<span class="no">Pokemon</span><span class="p">.</span><span class="nf">create</span><span class="p">(</span><span class="ss">name: </span><span class="s2">"Bikachu"</span><span class="p">)</span>
+<span class="c1"># returns the entire pokémon collection</span>
+<span class="no">Pokemon</span><span class="p">.</span><span class="nf">all</span>
+<span class="c1"># finds a pokémon by name or any other specified keyword</span>
+<span class="n">pika_correction</span> <span class="o">=</span> <span class="no">Pokemon</span><span class="p">.</span><span class="nf">find_by</span><span class="p">(</span><span class="ss">name: </span><span class="s2">"Bikachu"</span><span class="p">)</span>
+<span class="c1"># updates an incorrect field</span>
+<span class="n">pika_correction</span><span class="p">.</span><span class="nf">update</span><span class="p">(</span><span class="ss">name: </span><span class="s2">"Pikachu"</span><span class="p">)</span>
+<span class="c1"># deletes a row</span>
+<span class="n">pika_correction</span><span class="p">.</span><span class="nf">destroy</span>
+<span class="c1"># deletes all rows in the table</span>
+<span class="no">Pokemon</span><span class="p">.</span><span class="nf">destroy_all</span>
+</code></pre></div></div>
+<p>ActiveRecord also greatly simplifies table relations with the macros for associations such as has_one and belongs_to that generate primary/foreign key relationships as well as has-many :through and has-one :through to generate linking tables. More reading on that can be found in the <a href="https://guides.rubyonrails.org/association_basics.html">ActiveRecord Guide</a>.</p>
+
+<p>Thanks for reading, I’ll keep posting as our project grows!</p>
+
+:ET
